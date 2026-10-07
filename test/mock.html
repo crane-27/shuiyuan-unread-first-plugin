@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>水源未读优先 · 本地 mock 测试</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; color: #222; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .bar button { padding: 4px 10px; cursor: pointer; }
+  #out { background: #101418; color: #b8f5c0; padding: 12px; white-space: pre-wrap; font-size: 13px; line-height: 1.5; min-height: 140px; }
+  #mock-host { border-top: 1px dashed #999; margin-top: 16px; padding-top: 8px; }
+  table.topic-list { width: 100%; border-collapse: collapse; }
+  .topic-list th, .topic-list td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .topic-list .num { text-align: right; white-space: nowrap; }
+  .topic-post-badges { display: inline-block; }
+  .badge-notification { display: inline-block; min-width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 9px; background: #1a6fb5; color: #fff; padding: 0 4px; font-size: 11px; text-decoration: none; vertical-align: middle; }
+  .badge-notification.new-topic { min-width: 8px; width: 8px; height: 8px; padding: 0; border-radius: 50%; }
+  .badge-category__wrapper { background: var(--category-badge-color, #999); color: var(--category-badge-text-color, #fff); padding: 1px 6px; border-radius: 3px; font-size: 12px; text-decoration: none; }
+  .nav-pills { list-style: none; display: flex; gap: 8px; margin: 0; padding: 0; }
+  .nav-pills button.active { font-weight: 700; text-decoration: underline; }
+  .discourse-tags { font-size: 12px; color: #666; margin-right: 6px; }
+</style>
+</head>
+<body>
+<h3>水源未读优先 · 本地 mock 测试</h3>
+<p>点按钮运行场景并查看断言结果；DOM 区域在下方（结构与真实站点一致）。</p>
+<div class="bar" id="bar">
+  <button data-scenario="mixed">场景1 混合重排</button>
+  <button data-scenario="topupFull">场景2 补位到满</button>
+  <button data-scenario="topupPartial">场景3 补位不足</button>
+  <button data-scenario="fetchFail">场景4 接口失败</button>
+  <button data-scenario="idempotent">场景5 幂等</button>
+  <button data-scenario="tabGuard">场景6 相关 tab 守卫</button>
+</div>
+<pre id="out">（等待运行）</pre>
+
+<div id="mock-host">
+  <div class="more-topics__container">
+    <div class="more-topics__lists">
+      <div id="suggested-topics" class="more-topics__list" role="complementary" aria-labelledby="suggested-topics-title">
+        <h3 id="suggested-topics-title" class="more-topics__list-title">新话题和未读话题</h3>
+        <div class="topics">
+          <table class="topic-list">
+            <thead class="topic-list-header --has-tabs">
+              <tr>
+                <th scope="col" class="topic-list-data default">
+                  <ul class="nav nav-pills">
+                    <li><button class="btn active" tabindex="-1" title="推荐" type="button"><span class="d-button-label">推荐</span></button></li>
+                    <li><button class="btn btn-icon-text" tabindex="0" title="相关" type="button"><span class="d-button-label">相关</span></button></li>
+                  </ul>
+                </th>
+                <th scope="col" class="topic-list-data posts num"><span>回复</span></th>
+                <th scope="col" class="topic-list-data views num"><span>浏览量</span></th>
+                <th scope="col" class="topic-list-data activity num"><span>活动</span></th>
+              </tr>
+            </thead>
+            <tbody class="topic-list-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========== mock 环境：fetch stub ========== */
+window.__mock = (() => {
+  const CATEGORIES = [
+    { id: 87, name: '生活', color: 'FFAB00', text_color: 'FFFFFF', slug: 'life-experience' },
+    { id: 99, name: '职场生涯', color: 'FFD600', text_color: 'FFFFFF', slug: 'career', parent_category_id: 87, description_text: '职场生涯分类描述' },
+  ];
+  let unreadStatus = 200;
+  let unreadTopics = [];
+  const stats = { unread: 0, categories: 0, emojis: 0 };
+  const EMOJIS = { custom: [{ name: 'deepseek', url: '/images/emoji/custom/deepseek.png' }] };
+
+  window.fetch = async (url) => {
+    const u = String(url);
+    if (u.indexOf('/unread.json') !== -1) {
+      stats.unread += 1;
+      if (unreadStatus !== 200) return { ok: false, status: unreadStatus, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ topic_list: { topics: unreadTopics } }) };
+    }
+    if (u.indexOf('/categories.json') !== -1) {
+      stats.categories += 1;
+      return { ok: true, status: 200, json: async () => ({ category_list: { categories: CATEGORIES } }) };
+    }
+    if (u.indexOf('/emojis.json') !== -1) {
+      stats.emojis += 1;
+      return { ok: true, status: 200, json: async () => EMOJIS };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+
+  return {
+    setUnread(status, topics) { unreadStatus = status; unreadTopics = topics || []; },
+    stats,
+    resetStats() { stats.unread = 0; stats.categories = 0; stats.emojis = 0; },
+  };
+})();
+</script>
+
+<script src="../src/content.js"></script>
+
+<script>
+/* ========== fixture 与场景 ========== */
+(() => {
+  const tbody = document.querySelector('#suggested-topics tbody.topic-list-body');
+  const out = document.getElementById('out');
+  const results = [];
+
+  // 让 content script 的自动调度先停下，场景由测试代码显式调用 apply()
+  window.__syUf.pause();
+
+  function mkTopic(id, title, categoryId, state, extra) {
+    return Object.assign({
+      id,
+      title,
+      fancy_title: title,
+      category_id: categoryId,
+      __state: state,
+      unread_posts: state === 'unread' ? 1 : 0,
+      new_posts: state === 'unread' ? 1 : 0,
+      posts_count: 10,
+      reply_count: 9,
+      views: 123,
+      bumped_at: new Date(Date.now() - 20 * 60000).toISOString(),
+    }, extra || {});
+  }
+
+  function rowHtml(t) {
+    const isUnread = t.__state === 'unread';
+    const badge = isUnread
+      ? '<a href="/t/topic/' + t.id + '" title="未读回复" class="badge badge-notification unread-posts">' + (t.unread_posts || 1) + '</a>'
+      : '<a href="/t/topic/' + t.id + '" title="新话题" class="badge badge-notification new-topic"> </a>';
+    return (
+      '<tr data-topic-id="' + t.id + '" class="topic-list-item category-demo ' + (isUnread ? 'unread-posts' : 'unseen-topic') + '">' +
+        '<td class="main-link topic-list-data" colspan="1">' +
+          '<span class="link-top-line" role="heading" aria-level="2">' +
+            '<span class="topic-statuses"></span>' +
+            '<a href="/t/topic/' + t.id + '" data-topic-id="' + t.id + '" class="title raw-link raw-topic-link">' + t.title + '</a>' +
+            '<span class="topic-post-badges">\u00a0' + badge + '</span>' +
+          '</span>' +
+          '<div class="link-bottom-line">' +
+            '<span class="discourse-tags"><a class="discourse-tag" href="/tag/demo">演示标签</a></span>' +
+            '<a class="badge-category__wrapper" title="占位分类" style="--category-badge-color:#FFAB00;--category-badge-text-color:#FFFFFF;" href="/c/demo/' + t.category_id + '">' +
+              '<span data-category-id="' + t.category_id + '" class="badge-category"><span class="badge-category__name">占位分类</span></span>' +
+            '</a>' +
+          '</div>' +
+        '</td>' +
+        '<td class="num posts topic-list-data"><span class="posts">' + t.reply_count + '</span></td>' +
+        '<td class="num views topic-list-data"><span class="number">' + t.views + '</span></td>' +
+        '<td class="num activity topic-list-data"><span class="relative-date">20 分钟</span></td>' +
+      '</tr>'
+    );
+  }
+
+  function setRows(list) {
+    tbody.innerHTML = list.map(rowHtml).join('');
+  }
+
+  function allIds() {
+    return [...tbody.querySelectorAll('tr[data-topic-id]')].map((r) => r.dataset.topicId);
+  }
+  function visibleIds() {
+    return [...tbody.querySelectorAll('tr[data-topic-id]')]
+      .filter((r) => r.style.display !== 'none')
+      .map((r) => r.dataset.topicId);
+  }
+
+  function expect(label, actual, expected) {
+    const a = JSON.stringify(actual);
+    const e = JSON.stringify(expected);
+    results.push({ label, pass: a === e, detail: a === e ? '' : '实际=' + a + ' 期望=' + e });
+  }
+
+  function report(name) {
+    const failed = results.filter((r) => !r.pass).length;
+    out.textContent =
+      '== ' + name + ' ==\n' +
+      results.map((r) => (r.pass ? '✅ ' : '❌ ') + r.label + (r.pass ? '' : '\n    ' + r.detail)).join('\n') +
+      '\n' + (failed ? '❌ 失败 ' + failed + ' 项' : '✅ 全部通过');
+    results.length = 0;
+  }
+
+  function mixedRows() {
+    return [
+      mkTopic('s1', '未点开 1', 87, 'unseen'),
+      mkTopic('s2', '未读回复 A', 87, 'unread', { unread_posts: 3 }),
+      mkTopic('s3', '未点开 2', 87, 'unseen'),
+      mkTopic('s4', '未读回复 B', 99, 'unread', { unread_posts: 1 }),
+      mkTopic('s5', '未点开 3', 99, 'unseen'),
+    ];
+  }
+  function unseenRows(prefix, cat) {
+    return ['1', '2', '3', '4', '5'].map((n, i) =>
+      mkTopic(prefix + n, '新话题 ' + n, cat, 'unseen', { reply_count: 10 + i })
+    );
+  }
+  function apiUnread(ids, cat) {
+    return ids.map((id, i) =>
+      mkTopic(id, '注入话题 ' + id, cat, 'unread', {
+        unread_posts: i + 1,
+        new_posts: i + 1,
+        tags: i === 0 ? ['AI', '测试'] : [],
+      })
+    );
+  }
+
+  async function reset() {
+    window.__syUf.pause();
+    window.__syUf.resetCache();
+    window.__mock.resetStats();
+    document.querySelector('#suggested-topics button.active').classList.remove('active');
+    document.querySelector('#suggested-topics button[title="推荐"]').classList.add('active');
+  }
+
+  const scenarios = {
+    async mixed() {
+      await reset();
+      window.__mock.setUnread(200, []);
+      setRows(mixedRows());
+      await window.__syUf.apply();
+      expect('未读在前、组内稳定', visibleIds(), ['s2', 's4', 's1', 's3', 's5']);
+    },
+
+    async topupFull() {
+      await reset();
+      const unreadList = apiUnread(['t1', 't2', 't3', 't4', 't5', 't6', 't7'], 99);
+      unreadList[1].fancy_title = 'A&amp;B <img class="emoji" src="/images/emoji/t.png" alt="e">测试';
+      unreadList[2].title = '表情测试 :deepseek:';
+      unreadList[2].fancy_title = '表情测试 :deepseek:';
+      window.__mock.setUnread(200, unreadList);
+      setRows(unseenRows('u', 87));
+      await window.__syUf.apply();
+      expect('可见前 5 条为注入未读', visibleIds(), ['t1', 't2', 't3', 't4', 't5']);
+      expect('总行数 = 5 + 5', allIds().length, 10);
+      expect('原 5 条新话题被隐藏', [...tbody.querySelectorAll('tr')].filter((r) => r.style.display === 'none').length, 5);
+      expect('分类接口请求 1 次', window.__mock.stats.categories, 1);
+      const chipName = document.querySelector('tr[data-topic-id="t1"] .badge-category__name');
+      expect('注入行分类名来自接口', chipName && chipName.textContent, '职场生涯');
+      const badge = document.querySelector('tr[data-topic-id="t1"] .badge-notification.unread-posts');
+      expect('注入行未读徽标数字', badge && badge.textContent, '1');
+      expect('注入行标签按数据重建', [...document.querySelectorAll('tr[data-topic-id="t1"] .discourse-tags a.discourse-tag')].map((a) => a.textContent), ['AI', '测试']);
+      expect('无标签话题不带标签容器', document.querySelectorAll('tr[data-topic-id="t2"] .discourse-tags').length, 0);
+      expect('分类悬浮描述已同步', document.querySelector('tr[data-topic-id="t1"] a.badge-category__wrapper').getAttribute('title'), '职场生涯分类描述');
+      const wrap99 = document.querySelector('tr[data-topic-id="t1"] a.badge-category__wrapper');
+      expect('二级分类：父色变量已设置', wrap99 && wrap99.style.getPropertyValue('--parent-category-badge-color').trim(), '#FFAB00');
+      expect('二级分类：--has-parent 类已加', !!(wrap99 && wrap99.querySelector('.badge-category.--has-parent')), true);
+      const titleLink = document.querySelector('tr[data-topic-id="t2"] a.title');
+      expect('标题实体解码 + 表情图保留', [titleLink && titleLink.textContent, !!(titleLink && titleLink.querySelector('img.emoji'))], ['A&B 测试', true]);
+      const emojiImg = document.querySelector('tr[data-topic-id="t3"] a.title img.emoji');
+      expect('标题表情短代码渲染', [!!emojiImg, emojiImg && emojiImg.getAttribute('src')], [true, '/images/emoji/custom/deepseek.png']);
+    },
+
+    async topupPartial() {
+      await reset();
+      window.__mock.setUnread(200, apiUnread(['t1', 't2'], 87));
+      setRows(unseenRows('u', 87));
+      await window.__syUf.apply();
+      expect('未读 2 条 + 新话题 3 条补齐 5 条', visibleIds(), ['t1', 't2', 'u1', 'u2', 'u3']);
+      expect('其余 2 条隐藏', [...tbody.querySelectorAll('tr')].filter((r) => r.style.display === 'none').map((r) => r.dataset.topicId), ['u4', 'u5']);
+    },
+
+    async fetchFail() {
+      await reset();
+      window.__mock.setUnread(403, []);
+      setRows(mixedRows());
+      await window.__syUf.apply();
+      expect('接口失败：仅重排、不补位', visibleIds(), ['s2', 's4', 's1', 's3', 's5']);
+      expect('无注入行', tbody.querySelectorAll('tr[data-sy-injected]').length, 0);
+    },
+
+    async idempotent() {
+      await reset();
+      window.__mock.setUnread(200, apiUnread(['t1', 't2', 't3', 't4', 't5', 't6', 't7'], 99));
+      setRows(unseenRows('u', 87));
+      await window.__syUf.apply();
+      const before = document.querySelector('#suggested-topics').outerHTML;
+      await window.__syUf.apply();
+      const after = document.querySelector('#suggested-topics').outerHTML;
+      expect('二次执行零改动', after === before, true);
+      expect('注入行恰好 5 条', tbody.querySelectorAll('tr[data-sy-injected]').length, 5);
+    },
+
+    async tabGuard() {
+      await reset();
+      window.__mock.setUnread(200, apiUnread(['t1'], 99));
+      setRows(mixedRows());
+      // 切到「相关」
+      document.querySelector('#suggested-topics button[title="推荐"]').classList.remove('active');
+      document.querySelector('#suggested-topics button[title="相关"]').classList.add('active');
+      await window.__syUf.apply();
+      expect('相关激活时不改动顺序', allIds(), ['s1', 's2', 's3', 's4', 's5']);
+      expect('相关激活时不注入', tbody.querySelectorAll('tr[data-sy-injected]').length, 0);
+      expect('相关激活时不隐藏', [...tbody.querySelectorAll('tr')].filter((r) => r.style.display === 'none').length, 0);
+    },
+  };
+
+  document.getElementById('bar').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-scenario]');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      await scenarios[btn.dataset.scenario]();
+      report(btn.dataset.scenario);
+    } catch (err) {
+      out.textContent = '运行出错：' + (err && err.stack ? err.stack : err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

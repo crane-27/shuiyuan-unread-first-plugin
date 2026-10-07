@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- 水源未读优先：蓝色列表 + 未读气泡占位图标 -->
+  <rect x="4" y="4" width="88" height="88" rx="16" fill="#1a6fb5"/>
+  <rect x="18" y="24" width="42" height="8" rx="4" fill="#ffffff" opacity="0.9"/>
+  <rect x="18" y="44" width="42" height="8" rx="4" fill="#ffffff" opacity="0.9"/>
+  <rect x="18" y="64" width="42" height="8" rx="4" fill="#ffffff" opacity="0.9"/>
+  <circle cx="72" cy="34" r="12" fill="#ffd54f"/>
+  <circle cx="72" cy="54" r="10" fill="#e3f2fd" opacity="0.95"/>
+  <circle cx="72" cy="74" r="8" fill="#e3f2fd" opacity="0.7"/>
+</svg>

@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "水源未读优先",
+  "version": "0.1.4",
+  "description": "在水源社区话题页的「推荐」栏中，把有未读回复的话题排到最前，不足 5 条时自动补位。",
+  "content_scripts": [
+    {
+      "matches": ["https://shuiyuan.sjtu.edu.cn/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "shuiyuan-unread-first@liuil235",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}
