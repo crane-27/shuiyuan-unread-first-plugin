@@ -1,4 +1,4 @@
-# 水源未读优先（Firefox 扩展）
+# 水源未读优先（Firefox / Chrome 扩展）
 
 在 [水源社区](https://shuiyuan.sjtu.edu.cn) 话题页底部「推荐」栏中，把**有未读回复（跟踪级别）的话题**排到最前；不足 5 条时从论坛未读接口自动补位；整栏最多显示 5 条（该栏原设计）。
 
@@ -40,13 +40,37 @@
 3. 在 `web-ext-artifacts/` 得到已签名的 `.xpi`，拖入 Firefox 安装即可（不公开上架）。
    也可手动：AMO 开发者中心 →「提交附加组件」→ 选择「自发布（on your own）」上传 `npm run build` 的产物。
 
+### 方式三：Chrome / Edge 版（小范围分发）
+
+Chrome/Edge 版与 Firefox 版共用同一份 content script，用构建脚本生成：
+
+```bash
+npm run build:chrome
+```
+
+产物：
+- `dist/chrome/`：解压加载用的目录；
+- `dist/shuiyuan-unread-first-chrome-<版本>.zip`：发给他人（对方解压后加载）。
+
+对方安装步骤（Chrome 或 Edge）：
+1. 解压 zip 到一个**固定的文件夹**（之后不要删除或移动）；
+2. Chrome 打开 `chrome://extensions`（Edge 为 `edge://extensions`）；
+3. 打开右上角「开发者模式」；
+4. 点「加载已解压的扩展程序」，选择解压出来的文件夹；
+5. 登录水源，打开话题页查看效果。
+
+注意：
+- 这类非商店扩展必须通过「开发者模式」加载；请保持开发者模式开启，否则扩展会被停用；
+- 想免去开发者模式，可上架 Chrome Web Store（一次性 5 美元开发者注册费；可见性可选 Unlisted，仅链接可见）。
+
 ## 开发
 
 ```bash
 npm install      # 安装 web-ext / jsdom（Node 22+）
 npm run lint     # web-ext lint 静态检查
 npm test         # jsdom 自动化测试（排序 / 补位 / 截断 / 幂等 / 失败兜底 / tab 守卫 / 排除当前话题）
-npm run build    # 打包 zip → web-ext-artifacts/
+npm run build    # 打包 Firefox 版 zip → web-ext-artifacts/
+npm run build:chrome  # 生成 Chrome/Edge 版（解压加载 / 分发）→ dist/
 npm run run      # web-ext run：自动打开一个装有扩展的 Firefox
 ```
 
@@ -67,6 +91,7 @@ src/content.js       全部逻辑（纯 DOM + fetch，无扩展 API）
 icons/               图标（48/96 PNG + SVG 源）
 test/mock.html       浏览器手工测试页
 test/run-tests.mjs   jsdom 自动化测试
+scripts/build-chrome.mjs  Chrome/Edge 版构建（npm run build:chrome）
 PLAN.md              设计计划与决策记录
 ```
 

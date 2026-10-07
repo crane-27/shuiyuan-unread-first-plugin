@@ -4,9 +4,10 @@
   "private": true,
   "description": "水源社区（shuiyuan.sjtu.edu.cn）推荐栏未读优先 Firefox MV3 扩展",
   "scripts": {
-    "lint": "web-ext lint --ignore-files test refs PLAN.md package.json package-lock.json README.md",
-    "build": "web-ext build --overwrite-dest --filename=shuiyuan-unread-first.zip --ignore-files test refs PLAN.md package.json package-lock.json README.md",
-    "sign": "web-ext sign --channel=unlisted --ignore-files test refs PLAN.md package.json package-lock.json README.md",
+    "lint": "web-ext lint --ignore-files test refs scripts PLAN.md package.json package-lock.json README.md",
+    "build": "web-ext build --overwrite-dest --filename=shuiyuan-unread-first.zip --ignore-files test refs scripts PLAN.md package.json package-lock.json README.md",
+    "build:chrome": "node scripts/build-chrome.mjs",
+    "sign": "web-ext sign --channel=unlisted --ignore-files test refs scripts PLAN.md package.json package-lock.json README.md",
     "run": "web-ext run",
     "test": "node test/run-tests.mjs"
   },
